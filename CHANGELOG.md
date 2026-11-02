@@ -19,6 +19,8 @@ As such, _Breaking Changes_ are major. _Features_ would map to either major or m
   * Test against Rails edge (`rails/rails` main) in CI
 * Fixes
   * Use `lease_connection` in `ActsAsTaggableOn::Utils.connection` to avoid the Rails 7.2 `ActiveRecord::Base.connection` deprecation warning
+* Performance
+  * [@AhMohsen46 `tagged_with` with several tags no longer adds one `taggings` join per tag](https://github.com/mbleigh/acts-as-taggable-on/pull/1174). Queries with many tags now use a single grouped subquery, so query size and planner memory no longer grow with the tag count. Single-tag queries are unchanged. Multi-tag queries now return each taggable once, even when a tag matches in more than one context (`on: nil`)
 
 ### [v13.0.0) / 2025-10-31](https://github.com/mbleigh/acts-as-taggable-on/compare/v12.0.0...v13.0.0)
 

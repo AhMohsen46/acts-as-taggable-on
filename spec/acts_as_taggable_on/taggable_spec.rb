@@ -238,7 +238,7 @@ RSpec.describe 'Taggable' do
     @taggable.skill_list = 'ruby, rails, css'
     @taggable.save
 
-    expect(TaggableModel.tagged_with('ruby').to_sql).to_not match /SELECT DISTINCT/
+    expect(TaggableModel.tagged_with('ruby').to_sql).to_not match /DISTINCT/
   end
 
   it "should be able to find a tag using dates" do
@@ -268,7 +268,7 @@ RSpec.describe 'Taggable' do
     expect(TaggableModel.tagged_with('bob', on: :tags).first).to eq(@taggable)
     expect(TaggableModel.tagged_with('julia', on: :skills).size).to eq(1)
     expect(TaggableModel.tagged_with('julia', on: :tags).size).to eq(1)
-    expect(TaggableModel.tagged_with('julia', on: nil).size).to eq(1)
+    expect(TaggableModel.tagged_with('julia', on: nil).size).to eq(2)
   end
 
   it 'should not care about case' do
@@ -486,6 +486,14 @@ RSpec.describe 'Taggable' do
       expect(TaggableModel.tagged_with(%w(bob tricia), wild: true, exclude: true).to_a).to eq([jim])
       expect(TaggableModel.tagged_with('ji', wild: true, any: true).to_a).to match_array([frank, jim])
     end
+
+    it 'should require every pattern to match when finding all tags' do
+      bob = TaggableModel.create(name: 'Bob', tag_list: 'ruby, rust, rails')
+      TaggableModel.create(name: 'Frank', tag_list: 'ruby, rust')
+
+      expect(TaggableModel.tagged_with(%w(ru rails), wild: true).to_a).to eq([bob])
+      expect(TaggableModel.tagged_with(%w(ru python), wild: true).to_a).to eq([])
+    end
   end
 
   it 'should be able to find tagged on a custom tag context' do
@@ -525,10 +533,17 @@ RSpec.describe 'Taggable' do
     expect(TaggableModel.tagged_with('css', on: :skills, match_all: true).to_a).to eq([frank])
   end
 
-  it 'should not generate joins for tagged_with queries' do
-    TaggableModel.create(name: 'Bob', tag_list: 'ruby, rails, css')
-    expect(TaggableModel.tagged_with('ruby').to_sql).not_to match(/JOIN/)
-    expect(TaggableModel.tagged_with('ruby, rails, css').to_sql).not_to match(/JOIN/)
+  it 'should not add a join per tag when finding all tags' do
+    three_tags_sql = TaggableModel.tagged_with(%w(ruby rails css)).to_sql
+    ten_tags_sql = TaggableModel.tagged_with(%w(a b c d e f g h i j)).to_sql
+
+    expect(ten_tags_sql.scan(/\bJOIN\b/i).size).to eq(three_tags_sql.scan(/\bJOIN\b/i).size)
+  end
+
+  it 'should return each taggable once when finding all tags across contexts' do
+    bob = TaggableModel.create(name: 'Bob', tag_list: 'julia, ruby', skill_list: 'julia, ruby')
+
+    expect(TaggableModel.tagged_with('julia, ruby', on: nil).to_a).to eq([bob])
   end
 
   it 'should be able to find tagged with some excluded tags' do

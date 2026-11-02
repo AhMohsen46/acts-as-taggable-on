@@ -5,81 +5,103 @@ module ActsAsTaggableOn
     module TaggedWithQuery
       class AllTagsQuery < QueryBase
         def build
-          scope = taggable_model.where(
-            taggable_arel_table[taggable_model.primary_key].in(
-              taggables_with_all_tags
-            )
-          )
+          return single_tag_scope if tag_list.size == 1
+
+          taggable_ids = options[:match_all].present? ? taggables_with_exact_tag_count : taggables_with_all_tags
+
+          taggable_model.where(taggable_arel_table[taggable_model.primary_key].in(taggable_ids))
+                        .order(order_conditions)
+                        .readonly(false)
+        end
+
+        private
+
+        # A single tag keeps the original one-join query, so chaining on the
+        # joined taggings columns (e.g. `.group(:created_at)`) and the row
+        # cardinality stay exactly as before.
+        def single_tag_scope
+          tag = tag_list.first
+          tagging_alias = tagging_arel_table.alias(tagging_alias(tag))
+          arel_join = taggable_arel_table.join(tagging_alias).on(on_conditions(tag, tagging_alias))
 
           if options[:match_all].present?
-            taggable_model.find_by_sql(tag_arel_table.project(Arel.star.count).where(tags_match_type).to_sql)
+            arel_join = arel_join.join(tagging_arel_table, Arel::Nodes::OuterJoin).on(match_all_on_conditions)
+          end
 
-            scope = scope.where(
-              taggable_arel_table[taggable_model.primary_key].in(
-                taggables_with_exact_tag_count
-              )
-            )
+          scope = taggable_model.joins(arel_join.join_sources)
+
+          if options[:match_all].present?
+            scope = scope.group(taggable_arel_table[taggable_model.primary_key])
+                         .having(tagging_arel_table[:taggable_id].count.eq(matching_tags_count))
           end
 
           scope.order(order_conditions).readonly(false)
         end
 
-        private
+        def on_conditions(tag, tagging_alias)
+          tagging_filters(tagging_alias)
+            .and(tagging_alias[:taggable_id].eq(taggable_arel_table[taggable_model.primary_key]))
+            .and(tagging_alias[:tag_id].in(tag_arel_table.project(tag_arel_table[:id]).where(tag_match_type(tag))))
+        end
 
+        def match_all_on_conditions
+          tagging_arel_table[:taggable_id].eq(taggable_arel_table[taggable_model.primary_key])
+                                          .and(context_and_date_filters(tagging_arel_table))
+        end
+
+        # Multiple tags: one subquery over taggings joined to tags once, grouped
+        # by taggable. Each requested tag gets its own HAVING clause, so a
+        # wildcard pattern that matches several tags still counts once and
+        # every pattern must match on its own.
         def taggables_with_all_tags
           tagging_arel_table
             .project(tagging_arel_table[:taggable_id])
-            .where(tagging_conditions)
+            .join(tag_arel_table).on(tag_arel_table[:id].eq(tagging_arel_table[:tag_id]))
+            .where(tagging_filters(tagging_arel_table).and(tags_match_type))
             .group(tagging_arel_table[:taggable_id])
-            .having(tagging_arel_table[:tag_id].count(true).eq(tag_list.size))
+            .having(each_tag_matched)
         end
 
-        def tagging_conditions
-          condition = tagging_arel_table[:taggable_type].eq(taggable_model.base_class.name)
-                                                        .and(
-                                                          tagging_arel_table[:tag_id].in(
-                                                            tag_arel_table.project(tag_arel_table[:id]).where(tags_match_type)
-                                                          )
-                                                        )
+        def each_tag_matched
+          tag_list.map do |tag|
+            Arel::Nodes::Case.new.when(tag_match_type(tag)).then(1).else(0).sum.gt(0)
+          end.reduce(:and)
+        end
 
-          if options[:start_at].present?
-            condition = condition.and(tagging_arel_table[:created_at].gteq(options[:start_at]))
-          end
+        # Only taggables that already have every tag are counted, so match_all
+        # never groups the whole taggings table for the model.
+        def taggables_with_exact_tag_count
+          tagging_arel_table
+            .project(tagging_arel_table[:taggable_id])
+            .where(
+              context_and_date_filters(tagging_arel_table)
+                .and(tagging_arel_table[:taggable_id].in(taggables_with_all_tags))
+            )
+            .group(tagging_arel_table[:taggable_id])
+            .having(tagging_arel_table[:id].count.eq(matching_tags_count))
+        end
 
-          condition = condition.and(tagging_arel_table[:created_at].lteq(options[:end_at])) if options[:end_at].present?
+        def matching_tags_count
+          tag_arel_table.project(Arel.star.count).where(tags_match_type)
+        end
 
-          condition = condition.and(tagging_arel_table[:context].eq(options[:on])) if options[:on].present?
+        def tagging_filters(table)
+          condition = context_and_date_filters(table)
 
           if (owner = options[:owned_by]).present?
-            condition = condition.and(tagging_arel_table[:tagger_id].eq(owner.id))
-                                 .and(tagging_arel_table[:tagger_type].eq(owner.class.base_class.to_s))
+            condition = condition.and(table[:tagger_id].eq(owner.id))
+                                 .and(table[:tagger_type].eq(owner.class.base_class.to_s))
           end
 
           condition
         end
 
-        def taggables_with_exact_tag_count
-          all_condition = tagging_arel_table[:taggable_type].eq(taggable_model.base_class.name)
-
-          if options[:start_at].present?
-            all_condition = all_condition.and(tagging_arel_table[:created_at].gteq(options[:start_at]))
-          end
-
-          if options[:end_at].present?
-            all_condition = all_condition.and(tagging_arel_table[:created_at].lteq(options[:end_at]))
-          end
-
-          all_condition = all_condition.and(tagging_arel_table[:context].eq(options[:on])) if options[:on].present?
-
-          tagging_arel_table
-            .project(tagging_arel_table[:taggable_id])
-            .where(all_condition)
-            .group(tagging_arel_table[:taggable_id])
-            .having(
-              tagging_arel_table[:id].count.eq(
-                tag_arel_table.project(Arel.star.count).where(tags_match_type)
-              )
-            )
+        def context_and_date_filters(table)
+          condition = table[:taggable_type].eq(taggable_model.base_class.name)
+          condition = condition.and(table[:created_at].gteq(options[:start_at])) if options[:start_at].present?
+          condition = condition.and(table[:created_at].lteq(options[:end_at])) if options[:end_at].present?
+          condition = condition.and(table[:context].eq(options[:on])) if options[:on].present?
+          condition
         end
 
         def order_conditions
@@ -90,6 +112,11 @@ module ActsAsTaggableOn
 
           order_by << options[:order] if options[:order].present?
           order_by.join(', ')
+        end
+
+        def tagging_alias(tag)
+          alias_base_name = taggable_model.base_class.name.downcase
+          adjust_taggings_alias("#{alias_base_name[0..11]}_taggings_#{ActsAsTaggableOn::Utils.sha_prefix(tag)}")
         end
       end
     end
