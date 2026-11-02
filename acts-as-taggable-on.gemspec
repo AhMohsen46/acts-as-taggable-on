@@ -12,7 +12,7 @@ Gem::Specification.new do |gem|
 
   gem.files         = Dir['db/**/*', 'lib/**/*', 'LICENSE.md'].reject { |f| File.directory?(f) }
   gem.require_paths = ['lib']
-  gem.required_ruby_version     = '>= 3.1.0'
+  gem.required_ruby_version     = '>= 3.3.0'
 
   gem.metadata = { 'changelog_uri' => gem.homepage + '/blob/master/CHANGELOG.md',
                    'rubygems_mfa_required' => 'true' }
@@ -21,6 +21,6 @@ Gem::Specification.new do |gem|
     gem.post_install_message = File.read('UPGRADING.md')
   end
 
-  gem.add_runtime_dependency 'activerecord', '>= 7.1', '< 8.2'
+  gem.add_runtime_dependency 'activerecord', '>= 8.0', '< 9.0'
   gem.add_runtime_dependency 'zeitwerk', '>= 2.4', '< 3.0'
 end

@@ -64,6 +64,37 @@ RSpec.describe ActsAsTaggableOn::Tagging do
     ActsAsTaggableOn.tags_counter = tags_counter_previous_setting
   end
 
+  context 'when removing unused tags' do
+    around(:example) do |example|
+      original_value = ActsAsTaggableOn.remove_unused_tags
+      ActsAsTaggableOn.remove_unused_tags = true
+      example.run
+    ensure
+      ActsAsTaggableOn.remove_unused_tags = original_value
+    end
+
+    it 'should call reload on tag if it was loaded' do
+      @taggable = TaggableModel.create(name: 'Bob Jones')
+      @taggable.tag_list.add('aaa')
+      @taggable.save
+      tagging = @taggable.taggings.first
+      tagging.tag # load the tag
+
+      expect(tagging.tag).to receive(:reload).once
+      tagging.destroy
+    end
+
+    it 'should not call reload on tag if it was not loaded' do
+      @taggable = TaggableModel.create(name: 'Bob Jones')
+      @taggable.tag_list.add('aaa')
+      @taggable.save
+      tagging = @taggable.taggings.first
+
+      expect_any_instance_of(ActsAsTaggableOn::Tag).to_not receive(:reload)
+      tagging.destroy
+    end
+  end
+
   describe 'context scopes' do
     before do
       @tagging_2 = ActsAsTaggableOn::Tagging.new

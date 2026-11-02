@@ -7,7 +7,7 @@ module ActsAsTaggableOn
     class << self
       # Use ActsAsTaggableOn::Tag connection
       def connection
-        ActsAsTaggableOn::Tag.connection
+        ActsAsTaggableOn::Tag.lease_connection
       end
 
       def using_postgresql?

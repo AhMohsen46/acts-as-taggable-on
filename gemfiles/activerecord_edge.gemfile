@@ -10,9 +10,9 @@ gem "rake"
 gem "rspec"
 gem "rspec-rails"
 gem "rspec-its"
-gem "sqlite3", "~> 1.4"
+gem "sqlite3", "~> 2.2"
 gem "guard-rspec", require: false
-gem "activerecord", "~> 7.1.0"
+gem "activerecord", github: "rails/rails", branch: "main"
 gem "pg"
 gem "mysql2", "~> 0.5"
 

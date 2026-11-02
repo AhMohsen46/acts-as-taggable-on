@@ -251,6 +251,10 @@ User.tagged_with(["awesome", "cool"], :exclude => true)
 
 # Find users with any of the tags based on context:
 User.tagged_with(['awesome', 'cool'], :on => :tags, :any => true).tagged_with(['smart', 'shy'], :on => :skills, :any => true)
+
+# Find users tagged within a specific period:
+# (e.g. 2026-01-01 00:00 <= taggings.created_at <= 2026-02-01 00:00):
+User.tagged_with('awesome', start_at: Time.new(2026, 1, 1), end_at: Time.new(2026, 2, 1))
 ```
 
 #### Wildcard tag search
@@ -573,6 +577,8 @@ Versions >= 9.x are compatible with Ruby 2.5.0 and Rails 6 and 7.0.
 Versions >= 11.x are compatible with Ruby 3.1.0 and Rails 7.0 and 7.1.
 
 Versions >= 12.x are compatible with Ruby 3.2.0 and Rails 7.1, 7.2 and 8.0.
+
+Versions >= 14.x are compatible with Ruby 3.3+ and Rails 8.0 and 8.1.
 
 For an up-to-date roadmap, see https://github.com/mbleigh/acts-as-taggable-on/milestones
 

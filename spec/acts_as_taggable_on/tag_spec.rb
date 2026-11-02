@@ -1,11 +1,12 @@
 require 'spec_helper'
-require 'db/migrate/2_add_missing_unique_indices.rb'
 
 RSpec.shared_examples_for 'without unique index' do
-  prepend_before(:all) { AddMissingUniqueIndices.down }
+  prepend_before(:all) do
+    ActiveRecord::Migration.suppress_messages { ActiveRecord::Migration.remove_index ActsAsTaggableOn.tags_table, :name }
+  end
   append_after(:all) do
     ActsAsTaggableOn::Tag.delete_all
-    AddMissingUniqueIndices.up
+    ActiveRecord::Migration.suppress_messages { ActiveRecord::Migration.add_index ActsAsTaggableOn.tags_table, :name, unique: true }
   end
 end
 
